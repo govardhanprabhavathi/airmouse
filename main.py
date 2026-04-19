@@ -28,6 +28,7 @@ def main():
     roi_margin = 150 # DPI SENSITIVITY: Higher value = higher DPI. Creates a smaller required movement box so you don't have to stretch to reach corners.
     smoothing_factor = 0.2 # Reduced from 0.8 to 0.2. A lower factor provides heavy stabilization to completely eliminate the raw tracking jitter.
     prev_x, prev_y = None, None
+    scroll_prev_y = None
     
     # FPS variables
     pTime = 0
@@ -58,8 +59,8 @@ def main():
             
             # Gesture text logic moved to UI rendering block
             
-            # Pointer mode (Move cursor continuously unless making a Fist)
-            if gesture != "Fist":
+            # Pointer mode (Move cursor continuously unless making a Fist or Scrolling)
+            if gesture != "Fist" and gesture != "Scroll":
                 # Get index finger tip coordinates
                 x1, y1 = landmarks[detector.INDEX_TIP][1:]
                 
@@ -72,6 +73,7 @@ def main():
                 # Move mouse
                 mouse.move(smooth_x, smooth_y)
                 prev_x, prev_y = smooth_x, smooth_y
+                scroll_prev_y = None
                 
                 # Handle Pinch (Click vs Drag)
                 if gesture == "Pinch":
@@ -94,10 +96,23 @@ def main():
                             # It was a long pinch -> stop dragging
                             mouse.stop_drag()
                             
+            elif gesture == "Scroll":
+                # Extract y-coordinates of index and middle finger tips
+                y1 = landmarks[detector.INDEX_TIP][2]
+                y2 = landmarks[detector.MIDDLE_TIP][2]
+                avg_y = (y1 + y2) / 2
+                
+                if scroll_prev_y is not None:
+                    diff = scroll_prev_y - avg_y
+                    if abs(diff) > 2: # Add small deadzone to prevent jittery scrolling
+                        mouse.scroll(int(diff * 5)) # Speed multiplier
+                scroll_prev_y = avg_y
+                
             else: # Fist gesture
                 # Pause / Idle
                 # Reset previous coordinates to avoid jump when returning to Pointer
                 prev_x, prev_y = None, None 
+                scroll_prev_y = None
                 
         else:
              # Reset previous coordinates when no hands are detected
@@ -145,6 +160,7 @@ def main():
         guide_text = [
             "  * Any Hand : Move Cursor",
             "  * Pinch : Click (Hold to Drag)",
+            "  * 2 Fingers : Scroll Up/Down",
             "  * Fist : Pause/Idle Tracking"
         ]
         for i, text in enumerate(guide_text):

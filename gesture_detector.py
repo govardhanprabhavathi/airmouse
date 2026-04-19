@@ -52,14 +52,41 @@ class GestureDetector:
         
         return d1 > threshold and d2 > threshold and d3 > (threshold * 0.7)
 
+    def is_scroll(self, landmarks):
+        if len(landmarks) == 0:
+            return False
+            
+        # Check if Index and Middle are UP
+        index_tip = landmarks[self.INDEX_TIP]
+        index_pip = landmarks[self.INDEX_TIP - 2]
+        middle_tip = landmarks[self.MIDDLE_TIP]
+        middle_pip = landmarks[self.MIDDLE_TIP - 2]
+        
+        # Check if Ring and Pinky are DOWN
+        ring_tip = landmarks[self.RING_TIP]
+        ring_pip = landmarks[self.RING_TIP - 2]
+        pinky_tip = landmarks[self.PINKY_TIP]
+        pinky_pip = landmarks[self.PINKY_TIP - 2]
+        
+        # y increases downwards: tip[2] < pip[2] means finger is UP
+        index_up = index_tip[2] < index_pip[2]
+        middle_up = middle_tip[2] < middle_pip[2]
+        
+        ring_down = ring_tip[2] > ring_pip[2]
+        pinky_down = pinky_tip[2] > pinky_pip[2]
+        
+        return index_up and middle_up and ring_down and pinky_down
+
     def get_active_gesture(self, landmarks):
         if len(landmarks) == 0:
             return "None"
             
-        if self.is_pinch(landmarks):
-            return "Pinch"
-        elif self.is_fist(landmarks):
+        if self.is_fist(landmarks):
             return "Fist"
+        elif self.is_scroll(landmarks):
+            return "Scroll"
+        elif self.is_pinch(landmarks):
+            return "Pinch"
         elif self.is_open_palm(landmarks):
             return "Open Palm"
             
