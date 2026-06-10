@@ -13,12 +13,19 @@ Built entirely in Python, it uses **MediaPipe Tasks API** for robust, fast hand 
 
 ## Gestures & Controls
 
-- **Any Hand (Default)**: Move the cursor.
-- **Pinch (Index + Thumb)**: 
-  - *Quick Pinch*: Left Click.
-  - *Hold Pinch*: Click and Drag.
-- **2 Fingers Up (Index + Middle)**: Move your fingers up/down to scroll the active window.
-- **Fist**: Pause tracking / Idle mode.
+- **Point hand**: Move cursor (smooth tracking via One Euro Filter)
+- **Pinch thumb + index**: Left click (quick pinch)
+- **Double pinch thumb + index**: Double click (two quick pinches)
+- **Pinch and hold thumb + index**: Click & drag (hold pinch and move hand)
+- **Thumb + middle finger pinch**: Right click
+- **Thumb + ring finger pinch**: Middle click
+- **Two-finger pinch (thumb + index + middle) & move up/down**: Vertical scroll
+- **Two-finger pinch (thumb + index + middle) & move left/right**: Horizontal scroll
+- **Ring pinch & hold & move**: Precision scroll (middle drag scroll)
+- **Fist**: Play / Pause media (when media is playing)
+- **Swipe hand Left / Right**: Previous / Next media track (when media is playing)
+- **Rotate wrist Clockwise / Anti-clockwise**: Increase / Decrease system volume gradually (when media is playing)
+- **Peace Sign**: Capture Screenshot (saved to `screenshots/` directory)
 
 ## Installation & Setup
 

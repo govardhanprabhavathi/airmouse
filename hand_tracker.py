@@ -1,6 +1,16 @@
 import cv2
 import mediapipe as mp
 import time
+import sys
+import os
+
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 BaseOptions = mp.tasks.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
@@ -14,12 +24,12 @@ class HandTracker:
         self.track_con = track_con
         
         options = HandLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path='hand_landmarker.task'),
+            base_options=BaseOptions(model_asset_path=get_resource_path('hand_landmarker.task')),
             num_hands=self.max_hands,
             min_hand_detection_confidence=self.detection_con,
             min_hand_presence_confidence=self.track_con,
             min_tracking_confidence=self.track_con,
-            running_mode=VisionRunningMode.IMAGE
+            running_mode=VisionRunningMode.VIDEO
         )
         self.landmarker = HandLandmarker.create_from_options(options)
         self.results = None
@@ -53,7 +63,9 @@ class HandTracker:
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
         
-        self.results = self.landmarker.detect(mp_image)
+        # detect_for_video requires monotonically increasing timestamps in ms
+        timestamp_ms = int(time.time() * 1000)
+        self.results = self.landmarker.detect_for_video(mp_image, timestamp_ms)
         
         if self.results and self.results.hand_landmarks:
             for hand_lms in self.results.hand_landmarks:
