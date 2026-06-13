@@ -9,6 +9,9 @@ class GestureDetector:
         self.RING_TIP = 16
         self.WRIST = 0
         
+        # State tracking for hysteresis
+        self.last_gesture = "None"
+        
     def _get_distance(self, p1, p2):
         return math.hypot(p2[1] - p1[1], p2[2] - p1[2])
 
@@ -18,21 +21,21 @@ class GestureDetector:
         # Distance between WRIST (0) and MIDDLE_MCP (9)
         return max(self._get_distance(landmarks[self.WRIST], landmarks[9]), 1.0)
 
-    def is_pinch_index(self, landmarks, threshold_ratio=0.25):
+    def is_pinch_index(self, landmarks, threshold_ratio=0.18):
         if len(landmarks) == 0:
             return False
         distance = self._get_distance(landmarks[self.THUMB_TIP], landmarks[self.INDEX_TIP])
         palm_len = self.get_palm_length(landmarks)
         return (distance / palm_len) < threshold_ratio
 
-    def is_pinch_middle(self, landmarks, threshold_ratio=0.25):
+    def is_pinch_middle(self, landmarks, threshold_ratio=0.18):
         if len(landmarks) == 0:
             return False
         distance = self._get_distance(landmarks[self.THUMB_TIP], landmarks[self.MIDDLE_TIP])
         palm_len = self.get_palm_length(landmarks)
         return (distance / palm_len) < threshold_ratio
 
-    def is_pinch_ring(self, landmarks, threshold_ratio=0.25):
+    def is_pinch_ring(self, landmarks, threshold_ratio=0.18):
         if len(landmarks) == 0:
             return False
         distance = self._get_distance(landmarks[self.THUMB_TIP], landmarks[self.RING_TIP])
@@ -61,7 +64,12 @@ class GestureDetector:
         palm_len = self.get_palm_length(landmarks)
         dist = self._get_distance(landmarks[8], landmarks[12])
         wide = (dist / palm_len) > 0.4
-        return index_extended and middle_extended and ring_folded and pinky_folded and wide
+        
+        # Check that thumb is folded (closer to ring/middle MCP base)
+        thumb_folded = (self._get_distance(landmarks[4], landmarks[13]) < 0.85 * palm_len or
+                        self._get_distance(landmarks[4], landmarks[9]) < 0.85 * palm_len)
+                        
+        return index_extended and middle_extended and ring_folded and pinky_folded and wide and thumb_folded
 
     def is_fist(self, landmarks):
         if len(landmarks) == 0:
@@ -84,24 +92,37 @@ class GestureDetector:
 
     def get_active_gesture(self, landmarks):
         if len(landmarks) == 0:
+            self.last_gesture = "None"
             return "None"
             
         if self.is_peace_sign(landmarks):
+            self.last_gesture = "Peace Sign"
             return "Peace Sign"
         elif self.is_fist(landmarks):
+            self.last_gesture = "Fist"
             return "Fist"
             
-        is_index = self.is_pinch_index(landmarks)
-        is_middle = self.is_pinch_middle(landmarks)
-        is_ring = self.is_pinch_ring(landmarks)
+        # Determine pinch thresholds based on previous state (hysteresis)
+        th_index = 0.23 if self.last_gesture == "Pinch" or self.last_gesture == "Two-Finger Pinch" else 0.18
+        th_middle = 0.23 if self.last_gesture == "Pinch Middle" else 0.18
+        th_ring = 0.23 if self.last_gesture == "Pinch Ring" else 0.18
+        
+        is_index = self.is_pinch_index(landmarks, threshold_ratio=th_index)
+        is_middle = self.is_pinch_middle(landmarks, threshold_ratio=th_middle)
+        is_ring = self.is_pinch_ring(landmarks, threshold_ratio=th_ring)
         
         if is_index and is_middle:
+            self.last_gesture = "Two-Finger Pinch"
             return "Two-Finger Pinch"
         elif is_index:
+            self.last_gesture = "Pinch"
             return "Pinch"
         elif is_middle:
+            self.last_gesture = "Pinch Middle"
             return "Pinch Middle"
         elif is_ring:
+            self.last_gesture = "Pinch Ring"
             return "Pinch Ring"
             
+        self.last_gesture = "Pointer"
         return "Pointer" # Default state

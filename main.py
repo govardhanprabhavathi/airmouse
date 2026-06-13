@@ -181,6 +181,7 @@ def main():
     
     # Initialize Modules
     pyautogui.PAUSE = 0
+    pyautogui.FAILSAFE = False
     tracker = HandTracker(max_hands=1, detection_con=0.7)
     detector = GestureDetector()
     mouse = MouseController(screen_w, screen_h)
@@ -216,10 +217,13 @@ def main():
     # Media and Utility gestures state variables
     is_thumbs_up_active = False
     is_peace_active = False
+    peace_start_time = 0
     is_fist_active = False
+    fist_start_time = 0
     last_volume_time = 0
     last_swipe_time = 0
     wrist_history = []
+    gesture_history = []
     
     # UI display metrics
     last_action_str = "None"
@@ -245,8 +249,21 @@ def main():
         img = tracker.find_hands(img)
         landmarks = tracker.get_landmark_positions(img, hand_no=0)
         
+        display_gesture = "None"
         if len(landmarks) != 0:
-            gesture = detector.get_active_gesture(landmarks)
+            raw_gesture = detector.get_active_gesture(landmarks)
+            gesture_history.append(raw_gesture)
+            gesture_history = gesture_history[-5:]
+            
+            # Find the most common gesture in the rolling history window
+            counts = {}
+            for g in gesture_history:
+                counts[g] = counts.get(g, 0) + 1
+            most_common = max(counts, key=counts.get)
+            
+            # Require at least 3 out of 5 frames to switch/trigger a gesture
+            gesture = most_common if counts[most_common] >= 3 else "Pointer"
+            display_gesture = gesture
             
             # Pointer cursor movement (disabled during two-finger scrolling to keep cursor locked)
             if gesture != "None" and gesture != "Two-Finger Pinch":
@@ -361,57 +378,71 @@ def main():
                 else:
                     is_scrolling = False
 
-                # 5. Fist (Play / Pause media)
+                # 5. Fist (Play / Pause media - 0.2s hold)
                 if gesture == "Fist":
-                    if not is_fist_active:
-                        pyautogui.press('playpause')
-                        last_action_str = "Play / Pause"
-                        last_action_display_time = time.time()
-                        is_fist_active = True
+                    if fist_start_time == 0:
+                        fist_start_time = time.time()
+                    if time.time() - fist_start_time >= 0.2:
+                        if not is_fist_active:
+                            pyautogui.press('playpause')
+                            last_action_str = "Play / Pause"
+                            last_action_display_time = time.time()
+                            is_fist_active = True
                 else:
                     is_fist_active = False
+                    fist_start_time = 0
 
-                # 6. Peace Sign (Screenshot)
+                # 6. Peace Sign (Screenshot - 2 Second Hold)
                 if gesture == "Peace Sign":
-                    if not is_peace_active:
-                        is_peace_active = True
-                        try:
-                            # 1. Native Windows Screenshot (flashes screen and saves to Pictures/Screenshots)
-                            if sys.platform == 'win32':
-                                pyautogui.hotkey('win', 'printscreen')
-                            
-                            # 2. Local PIL backup saved to Pictures/Screenshots or Pictures
-                            import os
-                            user_profile = os.environ.get("USERPROFILE")
-                            save_dir = None
-                            if user_profile:
-                                p1 = os.path.join(user_profile, "Pictures", "Screenshots")
-                                p2 = os.path.join(user_profile, "Pictures")
-                                if os.path.exists(p1):
-                                    save_dir = p1
-                                elif os.path.exists(p2):
-                                    save_dir = p2
-                                    
-                            if not save_dir:
-                                save_dir = "screenshots"
-                                
-                            os.makedirs(save_dir, exist_ok=True)
-                            fn = os.path.join(save_dir, f"screenshot_{int(time.time())}.png")
-                            
-                            screenshot = pyautogui.screenshot()
-                            screenshot.save(fn)
-                            last_action_str = "Screenshot Saved"
-                        except Exception:
+                    if peace_start_time == 0:
+                        peace_start_time = time.time()
+                    
+                    elapsed = time.time() - peace_start_time
+                    if elapsed >= 2.0:
+                        if not is_peace_active:
+                            is_peace_active = True
                             try:
+                                # 1. Native Windows Screenshot (flashes screen and saves to Pictures/Screenshots)
+                                if sys.platform == 'win32':
+                                    pyautogui.hotkey('win', 'printscreen')
+                                
+                                # 2. Local PIL backup saved to Pictures/Screenshots or Pictures
+                                import os
+                                user_profile = os.environ.get("USERPROFILE")
+                                save_dir = None
+                                if user_profile:
+                                    p1 = os.path.join(user_profile, "Pictures", "Screenshots")
+                                    p2 = os.path.join(user_profile, "Pictures")
+                                    if os.path.exists(p1):
+                                        save_dir = p1
+                                    elif os.path.exists(p2):
+                                        save_dir = p2
+                                        
+                                if not save_dir:
+                                    save_dir = "screenshots"
+                                    
+                                os.makedirs(save_dir, exist_ok=True)
+                                fn = os.path.join(save_dir, f"screenshot_{int(time.time())}.png")
+                                
                                 screenshot = pyautogui.screenshot()
-                                os.makedirs("screenshots", exist_ok=True)
-                                screenshot.save(f"screenshots/screenshot_{int(time.time())}.png")
+                                screenshot.save(fn)
                                 last_action_str = "Screenshot Saved"
                             except Exception:
-                                last_action_str = "Screenshot Error"
-                        last_action_display_time = time.time()
+                                try:
+                                    screenshot = pyautogui.screenshot()
+                                    os.makedirs("screenshots", exist_ok=True)
+                                    screenshot.save(f"screenshots/screenshot_{int(time.time())}.png")
+                                    last_action_str = "Screenshot Saved"
+                                except Exception:
+                                    last_action_str = "Screenshot Error"
+                            last_action_display_time = time.time()
+                        display_gesture = "Screenshot!"
+                    else:
+                        remaining = 2.0 - elapsed
+                        display_gesture = f"Peace ({remaining:.1f}s)"
                 else:
                     is_peace_active = False
+                    peace_start_time = 0
 
                 # 8. Wrist Rotation (Volume) & Swipes (Media track control) - Enabled when media is playing
                 if is_media_playing():
@@ -459,6 +490,7 @@ def main():
              prev_x, prev_y = None, None
              filter_x, filter_y = None, None
              wrist_history = []
+             gesture_history.clear()
              
              if is_pinching:
                  is_pinching = False
@@ -469,7 +501,9 @@ def main():
              is_scrolling = False
              is_thumbs_up_active = False
              is_peace_active = False
+             peace_start_time = 0
              is_fist_active = False
+             fist_start_time = 0
 
         # Action display timeout helper
         if time.time() - last_action_display_time > 2.0:
@@ -485,13 +519,20 @@ def main():
         rendered_frame = render_ui(
             base_canvas, 
             img, 
-            gesture if len(landmarks) != 0 else "None", 
+            display_gesture, 
             last_action_str, 
             fps
         )
         
         cv2.imshow("AirMouse", rendered_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+            
+        # Check if the user closed the window by clicking the 'X' close button
+        try:
+            if cv2.getWindowProperty("AirMouse", cv2.WND_PROP_VISIBLE) < 1:
+                break
+        except Exception:
             break
             
     cap.release()
